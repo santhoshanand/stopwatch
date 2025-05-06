@@ -107,6 +107,6 @@ This application is delivered as a **single HTML file**, requiring only a modern
 
 ## 🪪 License
 
-This project is licensed under the **MIT License**.  
+This project is licensed under the **GPL-3.0 license**.  
 Feel free to use, modify, and share — just include the original license and credit.
 
