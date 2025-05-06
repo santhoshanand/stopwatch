@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="santhoshkumar::elathi.xyz">
+    <meta name="description" content="A simple stopwatch with roster and report features for meetings.prepared by elathi.xyz">
+    <title>Stopwatch with Roster and Report</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        /* Custom styles if needed, but primarily using Tailwind */
+        body {
+            font-family: 'Inter', sans-serif; /* Using Inter font */
+        }
+        /* Optional: Add a transition for the background color change */
+        .stopwatch-container {
+            transition: background-color 0.3s ease;
+        }
+        /* Style for the report table */
+        .report-table th, .report-table td {
+            padding: 8px;
+            border: 1px solid #e2e8f0; /* Tailwind gray-200 */
+        }
+        .report-table th {
+            background-color: #f8f8f8; /* Light gray background for headers */
+            text-align: left;
+        }
+        /* Color coding for report table time cells */
+        .time-green {
+            color: green;
+        }
+        .time-yellow {
+            color: orange; /* Using orange for yellow-ish */
+        }
+        /* Hide the roster input initially */
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4 space-y-8">
+
+    <div class="bg-white p-6 rounded-lg shadow-lg text-center max-w-sm w-full">
+        <h2 class="text-xl font-bold mb-4 text-gray-800">Set Time Limit (Seconds)</h2>
+        <div class="flex items-center justify-center space-x-4">
+             <label for="timeLimitInputMax" class="text-gray-700">Max:</label>
+            <input type="number" id="timeLimitInputMax" class="border rounded-md px-3 py-2 w-20 text-center text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" min="1" value="70">
+            <button id="confirmTimeLimitButton" class="px-4 py-2 bg-blue-500 text-white font-semibold rounded-md shadow hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">
+                Confirm
+            </button>
+        </div>
+        <p id="currentTimeLimit" class="mt-3 text-gray-600">Current Limit: Max: Not Set</p>
+    </div>
+
+    <div id="stopwatchContainer" class="stopwatch-container bg-white p-8 rounded-lg shadow-lg text-center max-w-sm w-full">
+        <h1 class="text-2xl font-bold mb-6 text-gray-800">Stopwatch</h1>
+
+        <div id="timerDisplay" class="text-5xl font-mono mb-8 text-gray-700">
+            00.00
+        </div>
+
+        <div class="flex flex-col items-center space-y-4 sm:flex-row sm:space-y-0 sm:space-x-4 justify-center">
+
+            <button id="startButton" class="px-6 py-3 bg-green-500 text-white font-semibold rounded-md shadow hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50">
+                Start
+            </button>
+            <button id="stopButton" class="px-6 py-3 bg-red-500 text-white font-semibold rounded-md shadow hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50" disabled>
+                Stop
+            </button>
+
+            <input type="text" id="rosterInput" class="border rounded-md px-3 py-2 w-40 text-center text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 hidden" placeholder="Roster # or Name">
+        </div>
+    </div>
+
+    <div id="reportSection" class="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
+        <h2 class="text-2xl font-bold mb-6 text-gray-800 text-center">Report</h2>
+        <table id="reportTable" class="report-table w-full border-collapse">
+            <thead>
+                <tr>
+                    <th>No</th>
+                    <th>Roster Sheet Number</th>
+                    <th>Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                </tbody>
+        </table>
+        <div class="mt-6 text-center">
+            <button id="exportReportButton" class="px-4 py-2 bg-blue-500 text-white font-semibold rounded-md shadow hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">
+                Export Report as Image
+            </button>
+        </div>
+    </div>
+
+
+    <script>
+        // Get elements
+        const stopwatchContainer = document.getElementById('stopwatchContainer');
+        const timerDisplay = document.getElementById('timerDisplay');
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const rosterInput = document.getElementById('rosterInput'); // Get roster input element
+
+        const timeLimitInputMax = document.getElementById('timeLimitInputMax'); // Get max time limit input
+        const confirmTimeLimitButton = document.getElementById('confirmTimeLimitButton');
+        const currentTimeLimitDisplay = document.getElementById('currentTimeLimit');
+
+        const reportSection = document.getElementById('reportSection'); // Get the entire report section
+        const reportTableBody = document.querySelector('#reportTable tbody'); // Get the tbody of the report table
+        const exportReportButton = document.getElementById('exportReportButton'); // Get the export button
+
+        let startTime = null; // Initialize startTime as null
+        let elapsedTime = 0; // To store the elapsed time in milliseconds
+        let timerInterval; // To store the interval ID for clearing the timer
+        let maxTimeLimit = null; // To store the confirmed maximum time limit in seconds
+        let reportRowNumber = 1; // Counter for report rows
+
+        // Function to format time from milliseconds to SS.ms (hundredths)
+        function formatTime(ms) {
+            const totalSeconds = Math.floor(ms / 1000);
+            // Get the first two digits of the milliseconds
+            const hundredths = Math.floor((ms % 1000) / 10);
+
+            // Pad seconds and hundredths with leading zeros
+            const padSeconds = String(totalSeconds).padStart(2, '0');
+            const padHundredths = String(hundredths).padStart(2, '0');
+
+            return `${padSeconds}.${padHundredths}`;
+        }
+
+        // Function to update the timer display and check time limit
+        function updateTimer() {
+            const now = Date.now();
+            // Ensure startTime is a valid number before calculating elapsedTime
+            if (startTime !== null) {
+                 elapsedTime = now - startTime;
+                 timerDisplay.textContent = formatTime(elapsedTime);
+
+                // Check if max time limit is set and apply background color
+                if (maxTimeLimit !== null) {
+                    const totalSeconds = Math.floor(elapsedTime / 1000);
+                    if (totalSeconds <= maxTimeLimit) {
+                         // Green if within or equal to max limit
+                         stopwatchContainer.classList.add('bg-green-200');
+                         stopwatchContainer.classList.remove('bg-red-200', 'bg-yellow-200');
+                    } else { // totalSeconds > maxTimeLimit
+                         // Yellow if over max limit
+                         stopwatchContainer.classList.add('bg-yellow-200');
+                         stopwatchContainer.classList.remove('bg-red-200', 'bg-green-200');
+                    }
+                } else {
+                     // If limit is not set, remove any color classes
+                     stopwatchContainer.classList.remove('bg-red-200', 'bg-green-200', 'bg-yellow-200');
+                }
+            } else {
+                 // If startTime is null, display initial time
+                 timerDisplay.textContent = '00.00';
+            }
+        }
+
+        // Function to add a row to the report table
+        function addReportRow(roster, time, timeInSeconds) {
+            const newRow = reportTableBody.insertRow(); // Insert a new row at the end
+
+            const cellNo = newRow.insertCell(0);
+            const cellRoster = newRow.insertCell(1);
+            const cellTime = newRow.insertCell(2);
+
+            cellNo.textContent = reportRowNumber++; // Add row number and increment
+            cellRoster.textContent = roster;
+            cellTime.textContent = time; // Add the formatted time
+
+            // Apply color coding to the time cell based on the max time limit
+            if (maxTimeLimit !== null) {
+                if (timeInSeconds <= maxTimeLimit) {
+                    cellTime.classList.add('time-green');
+                } else { // timeInSeconds > maxTimeLimit
+                    cellTime.classList.add('time-yellow');
+                }
+            }
+        }
+
+
+        // Event listener for the Start button
+        startButton.addEventListener('click', () => {
+            // Disable Start and enable Stop
+            startButton.disabled = true;
+            stopButton.disabled = false;
+
+            // Show the roster input field
+            rosterInput.classList.remove('hidden');
+            rosterInput.disabled = false; // Ensure it's enabled
+
+            // Record the start time, adjusting for any previously elapsed time if resuming
+            startTime = Date.now() - elapsedTime;
+
+            // Start the timer interval (update every 10 milliseconds for smoother hundredths display)
+            timerInterval = setInterval(updateTimer, 10);
+
+             // Ensure background color is reset when starting
+            stopwatchContainer.classList.remove('bg-red-200', 'bg-green-200', 'bg-yellow-200');
+        });
+
+        // Event listener for the Stop button
+        stopButton.addEventListener('click', () => {
+            // Disable Stop and enable Start
+            startButton.disabled = false;
+            stopButton.disabled = true;
+
+            // Clear the interval
+            clearInterval(timerInterval);
+
+            // Get the recorded time and roster number
+            const recordedTime = timerDisplay.textContent;
+            const rosterNumber = rosterInput.value.trim(); // Get and trim the roster input
+            const timeInSeconds = Math.floor(elapsedTime / 1000); // Get time in full seconds for comparison
+
+            // Validate roster input
+            if (rosterNumber === '') {
+                alert('Please enter the Roster Sheet Number or Name before stopping.');
+                // Do not add to report if roster is empty
+            } else {
+                // Add data to the report table
+                addReportRow(rosterNumber, recordedTime, timeInSeconds);
+
+                // Reset the stopwatch and roster input after adding to report
+                elapsedTime = 0;
+                startTime = null; // Reset startTime
+                timerDisplay.textContent = '00.00';
+                rosterInput.value = ''; // Clear roster input
+
+                 // Hide the roster input field again
+                rosterInput.classList.add('hidden');
+                rosterInput.disabled = true; // Disable it when hidden
+
+                 // Remove background color on stop
+                 stopwatchContainer.classList.remove('bg-red-200', 'bg-green-200', 'bg-yellow-200');
+            }
+        });
+
+        // Event listener for the Confirm Time Limit button
+        confirmTimeLimitButton.addEventListener('click', () => {
+            // Only read the max limit input
+            const inputMaxLimit = parseInt(timeLimitInputMax.value);
+
+            // Validate input (only max limit)
+            if (!isNaN(inputMaxLimit) && inputMaxLimit > 0) {
+                maxTimeLimit = inputMaxLimit;
+                currentTimeLimitDisplay.textContent = `Current Limit: Max: ${maxTimeLimit}s`;
+                 // Check time limit immediately *only if the timer is running*
+                 if (startTime !== null) {
+                    updateTimer();
+                 }
+            } else {
+                alert('Please enter a valid positive integer for the maximum time limit.');
+                maxTimeLimit = null; // Reset limit if input is invalid
+                currentTimeLimitDisplay.textContent = 'Current Limit: Max: Not Set';
+                 // Remove color if limit becomes invalid
+                 stopwatchContainer.classList.remove('bg-red-200', 'bg-green-200', 'bg-yellow-200');
+            }
+        });
+
+        // Event listener for the Export Report button
+        exportReportButton.addEventListener('click', () => {
+            // Use html2canvas to render the report section as a canvas
+            html2canvas(reportSection).then(canvas => {
+                // Convert the canvas to a data URL (PNG format)
+                const imgData = canvas.toDataURL('image/png');
+
+                // Create a temporary link element
+                const link = document.createElement('a');
+                link.href = imgData; // Set the href to the image data
+                link.download = 'meeting_report.png'; // Set the download filename
+
+                // Programmatically click the link to trigger the download
+                link.click();
+            }).catch(err => {
+                console.error('Error exporting report:', err);
+                alert('An error occurred while exporting the report.');
+            });
+        });
+
+
+        // Initial state:
+        stopButton.disabled = true; // Ensure stop is disabled on load
+        rosterInput.classList.add('hidden'); // Hide roster input on load
+        rosterInput.disabled = true; // Disable roster input on load
+
+        // Initial check for time limit display based on default value
+        if (timeLimitInputMax.value && parseInt(timeLimitInputMax.value) > 0) {
+             maxTimeLimit = parseInt(timeLimitInputMax.value);
+             currentTimeLimitDisplay.textContent = `Current Limit: Max: ${maxTimeLimit}s`;
+        }
+
+    </script>
+</body>
+</html>
